@@ -7,3 +7,4 @@ export { useHistory } from './hooks/use-history';
 export { useUndoShortcuts } from './hooks/use-undo-shortcuts';
 export { downloadDiagram, initEditor, readDiagramFile } from './persistence';
 export { selectSingleSelected, useEditor } from './store';
+export type { EditorStore } from './store';

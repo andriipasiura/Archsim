@@ -5,6 +5,8 @@ import {
   type PanelSize,
 } from 'react-resizable-panels';
 import {
+  CANVAS_LAYOUT,
+  CANVAS_LAYOUT_STORAGE_KEY,
   LAYOUT_STORAGE_KEY,
   PANEL_COLLAPSED_SIZE,
   PANEL_LAYOUT,
@@ -45,12 +47,23 @@ export function useEditorLayout() {
     id: LAYOUT_STORAGE_KEY,
     panelIds: Object.values(PANEL_LAYOUT).map((p) => p.id),
   });
+  const canvasLayout = useDefaultLayout({
+    id: CANVAS_LAYOUT_STORAGE_KEY,
+    panelIds: Object.values(CANVAS_LAYOUT).map((p) => p.id),
+  });
   const blocks = useCollapsiblePanel();
   const params = useCollapsiblePanel();
+  const simulation = useCollapsiblePanel();
 
   return {
     groupProps: { defaultLayout, onLayoutChanged },
+    canvasGroupProps: {
+      orientation: 'vertical',
+      defaultLayout: canvasLayout.defaultLayout,
+      onLayoutChanged: canvasLayout.onLayoutChanged,
+    } as const,
     blocks,
     params,
+    simulation,
   };
 }

@@ -16,4 +16,16 @@ export const PANEL_LAYOUT = {
   },
 } as const;
 
+export const CANVAS_LAYOUT_STORAGE_KEY = 'archsim:layout:canvas';
+
+export const CANVAS_LAYOUT = {
+  diagram: { id: 'diagram', minSize: '30%' },
+  simulation: {
+    id: 'simulation',
+    defaultSize: '13rem',
+    minSize: '13rem',
+    maxSize: '24rem',
+  },
+} as const;
+
 export const PANEL_COLLAPSED_SIZE = 0;

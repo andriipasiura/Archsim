@@ -4,6 +4,8 @@ import {
   Download,
   Maximize,
   Minus,
+  PanelBottomClose,
+  PanelBottomOpen,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -30,9 +32,14 @@ export interface PanelToggle {
 export interface CanvasOverlaysProps {
   blocks: PanelToggle;
   params: PanelToggle;
+  simulation: PanelToggle;
 }
 
-export function CanvasOverlays({ blocks, params }: CanvasOverlaysProps) {
+export function CanvasOverlays({
+  blocks,
+  params,
+  simulation,
+}: CanvasOverlaysProps) {
   return (
     <>
       <Panel position="top-left">
@@ -45,7 +52,7 @@ export function CanvasOverlays({ blocks, params }: CanvasOverlaysProps) {
         <FileBar params={params} />
       </Panel>
       <Panel position="bottom-left">
-        <ZoomBar />
+        <ZoomBar simulation={simulation} />
       </Panel>
     </>
   );
@@ -114,7 +121,7 @@ function FileBar({ params }: { params: PanelToggle }) {
   );
 }
 
-function ZoomBar() {
+function ZoomBar({ simulation }: { simulation: PanelToggle }) {
   const { zoomLabel, zoomIn, zoomOut, fit } = useZoomControls();
   return (
     <FloatingBar aria-label="Zoom">
@@ -132,6 +139,14 @@ function ZoomBar() {
       </IconButton>
       <IconButton label="Fit diagram to view" onClick={fit}>
         <Maximize />
+      </IconButton>
+      <FloatingBarDivider />
+      <IconButton
+        label={simulation.collapsed ? 'Show simulation' : 'Hide simulation'}
+        aria-expanded={!simulation.collapsed}
+        onClick={simulation.toggle}
+      >
+        {simulation.collapsed ? <PanelBottomOpen /> : <PanelBottomClose />}
       </IconButton>
     </FloatingBar>
   );

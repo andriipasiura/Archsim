@@ -4,15 +4,18 @@ import {
   MiniMap,
   ReactFlow,
   type Edge,
+  type EdgeTypes,
   type NodeTypes,
 } from '@xyflow/react';
 import { CANVAS_GRID, DELETE_KEYS, FIT_VIEW_OPTIONS } from '../constants';
 import { BLOCK_NODE_TYPE, type BlockNode } from '@/features/diagram';
 import { useCanvas } from '../hooks/use-canvas';
 import BlockNodeView from './BlockNodeView';
+import FlowEdge from './FlowEdge';
 import { CanvasOverlays, type CanvasOverlaysProps } from './CanvasOverlays';
 
 const nodeTypes: NodeTypes = { [BLOCK_NODE_TYPE]: BlockNodeView };
+const edgeTypes: EdgeTypes = { default: FlowEdge };
 
 export function Canvas(overlays: CanvasOverlaysProps) {
   const canvas = useCanvas();
@@ -20,6 +23,7 @@ export function Canvas(overlays: CanvasOverlaysProps) {
     <ReactFlow<BlockNode, Edge>
       {...canvas}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       deleteKeyCode={DELETE_KEYS}
       fitView
       fitViewOptions={FIT_VIEW_OPTIONS}
