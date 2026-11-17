@@ -268,3 +268,5 @@ export function initAccount(): () => void {
   void useAccount.getState().init();
   return stop;
 }
+
+export const useSignedIn = () => useAccount((s) => s.user !== null);

@@ -1,9 +1,12 @@
 import { useId, useMemo } from 'react';
+import { SCENARIO_LIMITS } from '@sds/shared';
 import { Play, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { SCENARIO_LIMITS } from '../constants';
+import { useSignedIn } from '@/features/account';
+import { SERVER_MODE_NEEDS_SIGN_IN } from '../messages';
 import { useSimulation, type ChartPoint } from '../store';
+import type { SimulationMode } from '../transport';
 import { MetricChart } from './MetricChart';
 
 const compact = new Intl.NumberFormat('en', {
@@ -30,11 +33,20 @@ function ScenarioForm() {
   const status = useSimulation((s) => s.status);
   const scenario = useSimulation((s) => s.scenario);
   const timeSec = useSimulation((s) => s.latest?.timeSec ?? 0);
-  const { start, stop, setScenario } = useSimulation.getState();
+  const storedMode = useSimulation((s) => s.mode);
+  const signedIn = useSignedIn();
+  const { start, stop, setScenario, setMode } = useSimulation.getState();
   const running = status === 'running';
+  const mode = signedIn ? storedMode : 'local';
 
   return (
     <div className="flex w-60 shrink-0 flex-col gap-2">
+      <ModeToggle
+        mode={mode}
+        disabled={running}
+        serverAvailable={signedIn}
+        onChange={setMode}
+      />
       <Slider
         label="Load"
         value={scenario.rps}
@@ -60,7 +72,7 @@ function ScenarioForm() {
         <Button
           size="sm"
           variant={running ? 'secondary' : 'default'}
-          onClick={running ? stop : start}
+          onClick={running ? stop : () => start(mode)}
         >
           {running ? <Square aria-hidden /> : <Play aria-hidden />}
           {running ? 'Stop' : 'Run'}
@@ -72,6 +84,50 @@ function ScenarioForm() {
           {status === 'idle' ? 'Idle' : `${timeSec.toFixed(1)} s`}
           {status === 'finished' && ' · finished'}
         </span>
+      </div>
+    </div>
+  );
+}
+
+const MODES: { value: SimulationMode; label: string }[] = [
+  { value: 'local', label: 'Browser' },
+  { value: 'server', label: 'Server' },
+];
+
+interface ModeToggleProps {
+  mode: SimulationMode;
+  disabled: boolean;
+  serverAvailable: boolean;
+  onChange: (mode: SimulationMode) => void;
+}
+
+function ModeToggle({
+  mode,
+  disabled,
+  serverAvailable,
+  onChange,
+}: ModeToggleProps) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs font-medium">Run in</span>
+      <div role="radiogroup" aria-label="Run in" className="flex gap-1">
+        {MODES.map(({ value, label }) => {
+          const locked = value === 'server' && !serverAvailable;
+          return (
+            <Button
+              key={value}
+              size="xs"
+              role="radio"
+              aria-checked={mode === value}
+              variant={mode === value ? 'secondary' : 'ghost'}
+              disabled={disabled || locked}
+              title={locked ? SERVER_MODE_NEEDS_SIGN_IN : undefined}
+              onClick={() => onChange(value)}
+            >
+              {label}
+            </Button>
+          );
+        })}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ const optionalString = z
 const envSchema = z.object({
   PORT: z.coerce.number().int().default(3000),
   DATABASE_URL: z.url(),
+  REDIS_URL: z.url().default('redis://localhost:6379'),
   WEB_URL: z.url().default('http://localhost:5173'),
   COOKIE_SECURE: z.stringbool().default(false),
   GITHUB_CLIENT_ID: optionalString,
@@ -29,6 +30,7 @@ export interface OAuthAppConfig {
 export interface AppConfig {
   port: number;
   databaseUrl: string;
+  redisUrl: string;
   webUrl: string;
   cookieSecure: boolean;
   oauth: Record<OAuthProviderId, OAuthAppConfig | null>;
@@ -55,6 +57,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
     port: e.PORT,
     databaseUrl: e.DATABASE_URL,
+    redisUrl: e.REDIS_URL,
     webUrl: e.WEB_URL,
     cookieSecure: e.COOKIE_SECURE,
     oauth: {

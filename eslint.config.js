@@ -35,6 +35,7 @@ export default defineConfig([
   {
     files: [
       'apps/api/**/*.ts',
+      'apps/simulator/**/*.ts',
       'packages/**/*.ts',
       '*.{js,ts}',
       'apps/*/*.{js,ts}',

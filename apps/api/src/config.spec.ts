@@ -9,6 +9,7 @@ describe('loadConfig', () => {
     ).toEqual({
       port: 3000,
       databaseUrl: base.DATABASE_URL,
+      redisUrl: 'redis://localhost:6379',
       webUrl: 'http://localhost:5173',
       cookieSecure: false,
       oauth: { github: null, google: null },
