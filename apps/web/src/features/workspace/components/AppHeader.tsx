@@ -1,4 +1,5 @@
 import { Workflow } from 'lucide-react';
+import { AccountBar } from '@/features/account';
 
 export function AppHeader() {
   return (
@@ -10,6 +11,7 @@ export function AppHeader() {
         <Workflow className="size-4" />
       </span>
       <h1 className="text-sm font-semibold">System Design Sandbox</h1>
+      <AccountBar />
     </header>
   );
 }

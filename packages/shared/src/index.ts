@@ -5,6 +5,7 @@ export {
   NAME_MAX_LENGTH,
   PARAM_LIMITS,
   canConnect,
+  diagramSchema,
   parseDiagram,
   type BlockParams,
   type CacheParams,
@@ -16,3 +17,20 @@ export {
   type ParseDiagramResult,
 } from './diagram.js';
 export type { HealthResponse } from './health.js';
+export {
+  DIAGRAM_NAME_MAX_LENGTH,
+  OAUTH_PROVIDERS,
+  isOAuthProvider,
+  createDiagramBodySchema,
+  updateDiagramBodySchema,
+  versionParamSchema,
+  type ApiError,
+  type CreateDiagramBody,
+  type DiagramDetail,
+  type DiagramSummary,
+  type DiagramVersionSummary,
+  type MeResponse,
+  type OAuthProviderId,
+  type UpdateDiagramBody,
+  type User,
+} from './api.js';

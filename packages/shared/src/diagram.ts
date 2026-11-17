@@ -106,7 +106,7 @@ export function canConnect(
   return !edges.some((e) => e.source === source && e.target === target);
 }
 
-const diagramSchema = z
+export const diagramSchema = z
   .object({
     version: z.literal(DIAGRAM_VERSION),
     nodes: z.array(nodeSchema),
