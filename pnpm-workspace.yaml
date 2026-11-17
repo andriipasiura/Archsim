@@ -2,6 +2,13 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
+allowBuilds:
+  '@prisma/engines': false
+  cpu-features: false
+  prisma: false
+  protobufjs: false
+  ssh2: false
+
 catalog:
   typescript: ~6.0.3
   '@types/node': ^24.0.0

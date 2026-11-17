@@ -1,7 +1,6 @@
-import { useReactFlow } from '@xyflow/react';
 import { useRef, type ChangeEvent } from 'react';
 import { DIAGRAM_FILE } from '@/features/diagram';
-import { FIT_VIEW_OPTIONS } from '../constants';
+import { useFitAfterLoad } from '@/features/canvas';
 import { toDiagram } from '@/features/diagram';
 import { EXAMPLE_DIAGRAM } from '@/features/diagram';
 import { downloadDiagram, readDiagramFile } from '@/features/diagram';
@@ -11,10 +10,7 @@ export function useDiagramFile() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceDiagram = useEditor((s) => s.replaceDiagram);
   const setNotice = useEditor((s) => s.setNotice);
-  const { fitView } = useReactFlow();
-
-  const fitAfterLoad = () =>
-    requestAnimationFrame(() => void fitView(FIT_VIEW_OPTIONS));
+  const fitAfterLoad = useFitAfterLoad();
 
   const importFile = async (file: File) => {
     const result = await readDiagramFile(file);

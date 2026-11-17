@@ -1,0 +1,79 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  moduleFormat        = "esm"
+  importFileExtension = "js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  login     String
+  name      String?
+  avatarUrl String?  @map("avatar_url")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  oauthAccounts OAuthAccount[]
+  sessions      Session[]
+  diagrams      Diagram[]
+
+  @@map("users")
+}
+
+model OAuthAccount {
+  id                String   @id @default(uuid(7)) @db.Uuid
+  provider          String
+  providerAccountId String   @map("provider_account_id")
+  userId            String   @map("user_id") @db.Uuid
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+model Session {
+  id        String   @id
+  userId    String   @map("user_id") @db.Uuid
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Diagram {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  name           String
+  currentVersion Int      @map("current_version")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  owner    User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  versions DiagramVersion[]
+
+  @@index([ownerId, updatedAt(sort: Desc)])
+  @@map("diagrams")
+}
+
+model DiagramVersion {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  diagramId String   @map("diagram_id") @db.Uuid
+  version   Int
+  content   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  diagram Diagram @relation(fields: [diagramId], references: [id], onDelete: Cascade)
+
+  @@unique([diagramId, version])
+  @@map("diagram_versions")
+}
