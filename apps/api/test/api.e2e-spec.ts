@@ -1,4 +1,6 @@
 import { execFileSync } from 'node:child_process';
+import { once } from 'node:events';
+import type { AddressInfo } from 'node:net';
 import { NotFoundException } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
@@ -7,14 +9,30 @@ import {
   type StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
 import {
+  RedisContainer,
+  type StartedRedisContainer,
+} from '@testcontainers/redis';
+import {
   DEFAULT_PARAMS,
+  SIM_QUEUE,
+  simControlKey,
+  simEventsChannel,
   type Diagram,
   type DiagramDetail,
   type OAuthProviderId,
+  type Scenario,
+  type SimClientMessage,
+  type SimControl,
+  type SimJobData,
+  type SimServerMessage,
 } from '@sds/shared';
+import { Worker } from 'bullmq';
+import { Redis } from 'ioredis';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
+import { WebSocket } from 'ws';
 import { AppModule } from '../src/app.module.js';
+import { AuthService } from '../src/auth/auth.service.js';
 import type {
   OAuthProfile,
   OAuthProvider,
@@ -84,14 +102,20 @@ function cookieValue(res: request.Response, name: string): string | undefined {
 
 describe('API (integration)', () => {
   let container: StartedPostgreSqlContainer;
+  let redisContainer: StartedRedisContainer;
   let app: NestExpressApplication;
   let http: App;
+  let port: number;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:18-alpine').start();
+    [container, redisContainer] = await Promise.all([
+      new PostgreSqlContainer('postgres:18-alpine').start(),
+      new RedisContainer('redis:8-alpine').start(),
+    ]);
     const env = {
       ...process.env,
       DATABASE_URL: container.getConnectionUri(),
+      REDIS_URL: redisContainer.getConnectionUrl(),
       WEB_URL,
     };
     execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], {
@@ -106,13 +130,14 @@ describe('API (integration)', () => {
       .compile();
     app = moduleRef.createNestApplication<NestExpressApplication>();
     configureApp(app);
-    await app.init();
+    await app.listen(0, '127.0.0.1');
     http = app.getHttpServer() as App;
+    port = (app.getHttpServer().address() as AddressInfo).port;
   }, 120_000);
 
   afterAll(async () => {
     await app?.close();
-    await container?.stop();
+    await Promise.all([container?.stop(), redisContainer?.stop()]);
   });
 
   async function signIn(
@@ -367,6 +392,175 @@ describe('API (integration)', () => {
         .post(`/diagrams/${id}/versions/9/restore`)
         .set('Cookie', alice)
         .expect(404);
+    });
+  });
+
+  describe('simulations', () => {
+    const scenario: Scenario = { rps: 1000, readRatio: 0.8, durationSec: 10 };
+    const FINISHING_RPS = 1;
+    let redis: Redis;
+    let worker: Worker<SimJobData>;
+
+    beforeAll(() => {
+      redis = new Redis(redisContainer.getConnectionUrl());
+      worker = new Worker<SimJobData>(
+        SIM_QUEUE,
+        async (job) => {
+          if (job.data.scenario.rps !== FINISHING_RPS) return;
+          const channel = simEventsChannel(job.id!);
+          for (const tick of [1, 2]) {
+            await redis.publish(
+              channel,
+              JSON.stringify({ type: 'tick', metrics: { tick } }),
+            );
+          }
+          await redis.publish(channel, JSON.stringify({ type: 'done' }));
+        },
+        { connection: { url: redisContainer.getConnectionUrl() } },
+      );
+    });
+
+    afterAll(async () => {
+      await worker?.close();
+      await redis?.quit();
+    });
+
+    function connect(cookie?: string, origin = WEB_URL) {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/simulations`, {
+        headers: { origin, ...(cookie && { cookie }) },
+      });
+      const messages: SimServerMessage[] = [];
+      ws.on('message', (raw: Buffer) => {
+        messages.push(JSON.parse(raw.toString()) as SimServerMessage);
+      });
+      const closed = once(ws, 'close');
+      const opened = once(ws, 'open');
+      const send = async (message: SimClientMessage) => {
+        await opened;
+        ws.send(JSON.stringify(message));
+      };
+      const start = (rps = scenario.rps) =>
+        send({
+          type: 'start',
+          diagram: diagram(),
+          scenario: { ...scenario, rps },
+          seed: 1,
+        });
+      return { ws, messages, closed, send, start };
+    }
+
+    async function session(accountId: string) {
+      const auth = app.get(AuthService);
+      const user = await auth.upsertOAuthUser('github', {
+        id: accountId,
+        login: accountId,
+        name: null,
+        avatarUrl: null,
+      });
+      return {
+        cookie: `sid=${await auth.createSession(user.id)}`,
+        id: user.id,
+      };
+    }
+
+    async function activeJobs(id: string): Promise<string[]> {
+      return redis.zrange(`sim:user:${id}:active`, '0', '-1');
+    }
+
+    it('rejects a socket without a session or from another origin', async () => {
+      const anonymous = connect();
+      await anonymous.closed;
+      expect(anonymous.messages).toEqual([
+        { type: 'error', message: 'Sign in to run simulations on the server.' },
+      ]);
+
+      const { cookie } = await session('ws-origin');
+      const foreign = connect(cookie, 'https://evil.test');
+      await foreign.closed;
+      expect(foreign.messages).toEqual([
+        { type: 'error', message: 'Origin not allowed.' },
+      ]);
+    });
+
+    it('forwards ticks and done from the worker, then closes', async () => {
+      const { cookie, id } = await session('ws-stream');
+      const client = connect(cookie);
+      await client.start(FINISHING_RPS);
+      await client.closed;
+
+      expect(client.messages).toEqual([
+        { type: 'tick', metrics: { tick: 1 } },
+        { type: 'tick', metrics: { tick: 2 } },
+        { type: 'done' },
+      ]);
+      await expect.poll(() => activeJobs(id)).toEqual([]);
+    });
+
+    it('limits concurrent runs per user, not across users', async () => {
+      const alice = await session('ws-alice');
+      const first = connect(alice.cookie);
+      const second = connect(alice.cookie);
+      await Promise.all([first.start(), second.start()]);
+      await expect.poll(() => activeJobs(alice.id)).toHaveLength(2);
+
+      const third = connect(alice.cookie);
+      await third.start();
+      await third.closed;
+      expect(third.messages).toEqual([
+        {
+          type: 'error',
+          message: 'You can run up to 2 server simulations at once.',
+        },
+      ]);
+
+      const bob = await session('ws-bob');
+      const parallel = connect(bob.cookie);
+      await parallel.start(FINISHING_RPS);
+      await parallel.closed;
+      expect(parallel.messages.at(-1)).toEqual({ type: 'done' });
+
+      first.ws.close();
+      second.ws.close();
+      await expect.poll(() => activeJobs(alice.id)).toEqual([]);
+    });
+
+    it('passes updates to the worker and cancels when the client leaves', async () => {
+      const { cookie, id } = await session('ws-control');
+      const client = connect(cookie);
+      await client.start();
+      await expect.poll(() => activeJobs(id)).toHaveLength(1);
+      const [jobId] = await activeJobs(id);
+      const control = async () =>
+        JSON.parse(
+          (await redis.get(simControlKey(jobId!))) ?? 'null',
+        ) as SimControl | null;
+
+      await client.send({
+        type: 'scenario',
+        scenario: { ...scenario, rps: 5000 },
+      });
+      await expect
+        .poll(control)
+        .toMatchObject({ rev: 1, scenario: { rps: 5000 }, cancelled: false });
+
+      client.ws.close();
+      await expect.poll(control).toMatchObject({ rev: 2, cancelled: true });
+      await expect.poll(() => activeJobs(id)).toEqual([]);
+    });
+
+    it('closes the socket on an invalid message', async () => {
+      const client = connect((await session('ws-invalid')).cookie);
+      await client.send({
+        type: 'scenario',
+        scenario: { ...scenario, rps: -1 },
+      });
+      await client.closed;
+      expect(client.messages).toEqual([
+        {
+          type: 'error',
+          message: expect.stringContaining('Invalid message') as string,
+        },
+      ]);
     });
   });
 

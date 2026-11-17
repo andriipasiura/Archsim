@@ -28,6 +28,21 @@ services:
       timeout: 3s
       retries: 10
 
+  # `pnpm dev` runs the simulator on the host; this is the containerized one:
+  # docker compose --profile simulator up -d
+  simulator:
+    profiles: [simulator]
+    build:
+      context: .
+      dockerfile: apps/simulator/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 15s
+
 volumes:
   postgres-data:
   redis-data:

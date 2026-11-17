@@ -1,9 +1,17 @@
-import type { Scenario, TickMetrics } from '@sds/sim-engine';
+import type {
+  Scenario,
+  SimClientMessage,
+  SimServerMessage,
+  TickMetrics,
+} from '@sds/shared';
 import { create } from 'zustand';
 import { toDiagram, useEditor, type EditorStore } from '@/features/diagram';
 import { DEFAULT_SCENARIO, HISTORY_POINTS, SEED } from './constants';
-import { SIMULATION_FAILED } from './messages';
-import type { WorkerRequest, WorkerResponse } from './protocol';
+import {
+  openTransport,
+  type SimulationMode,
+  type SimulationTransport,
+} from './transport';
 
 export type SimulationStatus = 'idle' | 'running' | 'finished';
 
@@ -18,14 +26,16 @@ export interface ChartPoint {
 
 interface SimulationState {
   status: SimulationStatus;
+  mode: SimulationMode;
   scenario: Scenario;
   latest: TickMetrics | null;
   history: ChartPoint[];
 }
 
 interface SimulationActions {
-  start(): void;
+  start(mode: SimulationMode): void;
   stop(): void;
+  setMode(mode: SimulationMode): void;
   setScenario(patch: Partial<Scenario>): void;
 }
 
@@ -63,32 +73,37 @@ function toPoint({ timeSec, overall }: TickMetrics): ChartPoint {
   };
 }
 
-let session: { worker: Worker; unsubscribe: () => void } | null = null;
+let session: {
+  transport: SimulationTransport;
+  unsubscribe: () => void;
+} | null = null;
 
 function endSession() {
-  session?.worker.terminate();
+  session?.transport.close();
   session?.unsubscribe();
   session = null;
 }
 
-function send(message: WorkerRequest) {
-  session?.worker.postMessage(message);
+function send(message: SimClientMessage) {
+  session?.transport.send(message);
 }
 
 export const useSimulation = create<SimulationState & SimulationActions>()(
   (set, get) => ({
     status: 'idle',
+    mode: 'local',
     scenario: DEFAULT_SCENARIO,
     latest: null,
     history: [],
 
-    start: () => {
+    start: (mode) => {
       endSession();
-      const worker = new Worker(new URL('./sim.worker.ts', import.meta.url), {
-        type: 'module',
-      });
-      worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-        const message = event.data;
+      const fail = (message: string) => {
+        endSession();
+        set({ status: 'idle' });
+        useEditor.getState().setNotice(message);
+      };
+      const onMessage = (message: SimServerMessage) => {
         if (message.type === 'tick') {
           set((s) => ({
             latest: message.metrics,
@@ -96,23 +111,20 @@ export const useSimulation = create<SimulationState & SimulationActions>()(
               -HISTORY_POINTS,
             ),
           }));
-        } else {
+        } else if (message.type === 'done') {
           endSession();
           set({ status: 'finished' });
+        } else {
+          fail(message.message);
         }
       };
-      worker.onerror = (event) => {
-        event.preventDefault();
-        endSession();
-        set({ status: 'idle' });
-        useEditor.getState().setNotice(SIMULATION_FAILED);
-      };
+      const transport = openTransport(mode, { onMessage, onFailure: fail });
       const unsubscribe = useEditor.subscribe((next, prev) => {
         if (diagramStructureChanged(prev, next)) {
           send({ type: 'diagram', diagram: currentDiagram() });
         }
       });
-      session = { worker, unsubscribe };
+      session = { transport, unsubscribe };
       send({
         type: 'start',
         diagram: currentDiagram(),
@@ -126,6 +138,8 @@ export const useSimulation = create<SimulationState & SimulationActions>()(
       endSession();
       set({ status: 'idle' });
     },
+
+    setMode: (mode) => set({ mode }),
 
     setScenario: (patch) => {
       const scenario = { ...get().scenario, ...patch };

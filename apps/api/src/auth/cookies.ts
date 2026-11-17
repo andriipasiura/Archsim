@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
+import type { IncomingMessage } from 'node:http';
 import { parseCookie } from 'cookie';
-import type { CookieOptions, Request } from 'express';
+import type { CookieOptions } from 'express';
 
 export const SESSION_COOKIE = 'sid';
 export const OAUTH_STATE_COOKIE = 'oauth_state';
@@ -8,7 +9,10 @@ export const OAUTH_STATE_COOKIE = 'oauth_state';
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
-export function readCookie(req: Request, name: string): string | undefined {
+export function readCookie(
+  req: Pick<IncomingMessage, 'headers'>,
+  name: string,
+): string | undefined {
   const header = req.headers.cookie;
   return header ? parseCookie(header)[name] : undefined;
 }

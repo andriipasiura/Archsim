@@ -1,0 +1,25 @@
+{
+  "name": "simulator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "node --watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sds/shared": "workspace:*",
+    "@sds/sim-engine": "workspace:*",
+    "bullmq": "6.7.6",
+    "ioredis": "^6.0.0"
+  },
+  "devDependencies": {
+    "@testcontainers/redis": "^12.2.1",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
